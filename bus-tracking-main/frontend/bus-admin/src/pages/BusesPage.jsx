@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, X, Search } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://bus-tracking-backend-8sjh.onrender.com';
 
 // Helper to get stored JWT token
 const getToken = () => sessionStorage.getItem('authToken');

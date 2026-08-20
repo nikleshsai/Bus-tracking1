@@ -9,7 +9,7 @@ import { useSocketBus } from './hooks/useSocketBus';
 import supabase from './lib/supabaseClient';
 import './App.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://bus-tracking-zbon.onrender.com';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://bustransit-g4ks.onrender.com';
 
 // ── Map Supabase column names → frontend field names ─────────────────────
 const mapFromDb = (row) => ({
@@ -29,13 +29,13 @@ const mapFromDb = (row) => ({
  * App — Root component.
  */
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn]             = useState(() => sessionStorage.getItem('isLoggedIn') === 'true');
-  const [userEmail, setUserEmail]               = useState(() => sessionStorage.getItem('userEmail') || 'admin@example.com');
-  const [authToken, setAuthToken]               = useState(() => sessionStorage.getItem('authToken') || null);
-  const [rawBuses, setRawBuses]                 = useState([]);
-  const [currentPage, setCurrentPage]           = useState('Dashboard');
-  const [sidebarOpen, setSidebarOpen]           = useState(true);
-  const [showLogoutModal, setShowLogoutModal]   = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => sessionStorage.getItem('isLoggedIn') === 'true');
+  const [userEmail, setUserEmail] = useState(() => sessionStorage.getItem('userEmail') || 'admin@example.com');
+  const [authToken, setAuthToken] = useState(() => sessionStorage.getItem('authToken') || null);
+  const [rawBuses, setRawBuses] = useState([]);
+  const [currentPage, setCurrentPage] = useState('Dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   // ── Real-time GPS updates + smooth interpolation ──────────────────────
@@ -69,9 +69,9 @@ export default function App() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'Dashboard': return <Dashboard buses={buses} />;
-      case 'Buses':     return <Buses buses={buses} setBuses={setRawBuses} />;
-      default:          return <Dashboard buses={buses} />;
+      case 'Dashboard': return <Dashboard buses={buses} authToken={authToken} />;
+      case 'Buses': return <Buses buses={buses} setBuses={setRawBuses} />;
+      default: return <Dashboard buses={buses} authToken={authToken} />;
     }
   };
 

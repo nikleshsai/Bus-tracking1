@@ -74,19 +74,19 @@ exports.updateBusMetadata = async (id, fields) => {
 
   // Map frontend field aliases to database column names
   const payload = {
-    ...(safeFields.bus_number   !== undefined && { bus_number:          safeFields.bus_number }),
-    ...(safeFields.busId        !== undefined && { bus_number:          safeFields.busId }),
+    ...(safeFields.bus_number !== undefined && { bus_number: safeFields.bus_number }),
+    ...(safeFields.busId !== undefined && { bus_number: safeFields.busId }),
     ...(safeFields.registration_number !== undefined && { registration_number: safeFields.registration_number }),
-    ...(safeFields.busNo        !== undefined && { registration_number: safeFields.busNo }),
-    ...(safeFields.driver_name  !== undefined && { driver_name:         safeFields.driver_name }),
-    ...(safeFields.driver       !== undefined && { driver_name:         safeFields.driver }),
-    ...(safeFields.driver_phone !== undefined && { driver_phone:        safeFields.driver_phone }),
-    ...(safeFields.contact      !== undefined && { driver_phone:        safeFields.contact }),
-    ...(safeFields.route_name   !== undefined && { route_name:          safeFields.route_name }),
-    ...(safeFields.route        !== undefined && { route_name:          safeFields.route }),
-    ...(safeFields.license_number !== undefined && { license_number:    safeFields.license_number }),
-    ...(safeFields.license      !== undefined && { license_number:      safeFields.license }),
-    ...(safeFields.capacity     !== undefined && { capacity:            safeFields.capacity }),
+    ...(safeFields.busNo !== undefined && { registration_number: safeFields.busNo }),
+    ...(safeFields.driver_name !== undefined && { driver_name: safeFields.driver_name }),
+    ...(safeFields.driver !== undefined && { driver_name: safeFields.driver }),
+    ...(safeFields.driver_phone !== undefined && { driver_phone: safeFields.driver_phone }),
+    ...(safeFields.contact !== undefined && { driver_phone: safeFields.contact }),
+    ...(safeFields.route_name !== undefined && { route_name: safeFields.route_name }),
+    ...(safeFields.route !== undefined && { route_name: safeFields.route }),
+    ...(safeFields.license_number !== undefined && { license_number: safeFields.license_number }),
+    ...(safeFields.license !== undefined && { license_number: safeFields.license }),
+    ...(safeFields.capacity !== undefined && { capacity: safeFields.capacity }),
   };
 
   if (Object.keys(payload).length === 0) {
@@ -102,4 +102,55 @@ exports.updateBusMetadata = async (id, fields) => {
 
   if (error) throw error;
   return data;
+};
+
+/**
+ * createBus
+ * Creates a new bus record in the buses table.
+ *
+ * @param {object} fields
+ * @returns {Promise<object>}
+ */
+exports.createBus = async (fields) => {
+  const payload = {
+    ...(fields.bus_number !== undefined && { bus_number: fields.bus_number }),
+    ...(fields.busId !== undefined && { bus_number: fields.busId }),
+    ...(fields.registration_number !== undefined && { registration_number: fields.registration_number }),
+    ...(fields.busNo !== undefined && { registration_number: fields.busNo }),
+    ...(fields.driver_name !== undefined && { driver_name: fields.driver_name }),
+    ...(fields.driver !== undefined && { driver_name: fields.driver }),
+    ...(fields.driver_phone !== undefined && { driver_phone: fields.driver_phone }),
+    ...(fields.contact !== undefined && { driver_phone: fields.contact }),
+    ...(fields.route_name !== undefined && { route_name: fields.route_name }),
+    ...(fields.route !== undefined && { route_name: fields.route }),
+    ...(fields.license_number !== undefined && { license_number: fields.license_number }),
+    ...(fields.license !== undefined && { license_number: fields.license }),
+    ...(fields.capacity !== undefined && { capacity: fields.capacity }),
+    status: "Pending (GPS)",
+  };
+
+  const { data, error } = await writeClient()
+    .from("buses")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * deleteBus
+ * Deletes a bus from the buses table by primary key.
+ *
+ * @param {string|number} id
+ * @returns {Promise<void>}
+ */
+exports.deleteBus = async (id) => {
+  const { error } = await writeClient()
+    .from("buses")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw error;
 };

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, X, Search } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://bus-tracking-backend-8sjh.onrender.com';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://bustransit-g4ks.onrender.com';
 
 // Helper to get stored JWT token
 const getToken = () => sessionStorage.getItem('authToken');
@@ -42,7 +42,8 @@ const BusesPage = ({ buses, setBuses }) => {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
         if (!res.ok) throw new Error(`Failed to load buses (${res.status})`);
-        const data = await res.json();
+        const json = await res.json();
+        const data = json.data || json;
         setBuses(Array.isArray(data) ? data.map(mapFromDb) : []);
       } catch (err) {
         console.error('fetchBuses:', err.message);

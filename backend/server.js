@@ -1,79 +1,254 @@
-/**
- * server.js
- * ─────────────────────────────────────────────────────────────
- * HTTP server entry point.
- *
- * Boot sequence:
- *   1. Load environment variables (config/env.js validates them)
- *   2. Create Express app
- *   3. Create raw Node.js HTTP server from the Express app
- *   4. Attach Socket.IO to the HTTP server
- *   5. Start listening on configured port
- *   6. Start GPS background scheduler (after server is ready)
- *
- * Why separate server.js from app.js?
- *   app.js exports the Express instance for testing.
- *   server.js handles the real-world HTTP server lifecycle.
- * ─────────────────────────────────────────────────────────────
- */
+const express = require("express");
+const cors = require("cors");
+const http = require("http");
+const { Server } = require("socket.io");
+const supabase = require("./supabase");
 
-const http   = require("http");
-const path   = require("path");
 
-// ── Load environment variables ─────────────────────────────────────────────
-// Must be the FIRST thing that runs. config/env.js also validates
-// required variables and exits the process if any are missing.
-require("./config/env");
+const app = express();
 
-const app    = require("./app");
-const config = require("./config/env");
-const { initSocket }        = require("./config/socket");
-const { startGpsScheduler } = require("./gps/gpsScheduler");
+const server = http.createServer(app);
 
-// ── Create HTTP server ─────────────────────────────────────────────────────
-// Using http.createServer() instead of app.listen() so that
-// Socket.IO can be attached to the same underlying server.
-const httpServer = http.createServer(app);
-
-// ── Attach Socket.IO ───────────────────────────────────────────────────────
-// Must happen before httpServer.listen() so clients can connect
-// immediately when the server starts.
-initSocket(httpServer);
-
-// ── Start listening ────────────────────────────────────────────────────────
-httpServer.listen(config.port, () => {
-  console.log("═══════════════════════════════════════════════");
-  console.log("  🚌  AmcetTransit Bus Tracking — v2.0.0");
-  console.log("═══════════════════════════════════════════════");
-  console.log(`  🌐  HTTP   : http://localhost:${config.port}`);
-  console.log(`  🔌  Socket : ws://localhost:${config.port}`);
-  console.log(`  🌍  Env    : ${config.nodeEnv}`);
-  console.log(`  📡  CORS   : ${config.frontendUrl}`);
-  console.log("═══════════════════════════════════════════════");
-
-  // ── Start GPS scheduler AFTER server is ready ──────────────
-  // This ensures Socket.IO is initialized before the first
-  // GPS sync tries to broadcast events.
-  startGpsScheduler();
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
-// ── Graceful shutdown handler ──────────────────────────────────────────────
-const { stopGpsScheduler } = require("./gps/gpsScheduler");
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-process.on("SIGTERM", () => {
-  console.log("[Server] SIGTERM received. Shutting down gracefully…");
-  stopGpsScheduler();
-  httpServer.close(() => {
-    console.log("[Server] HTTP server closed.");
-    process.exit(0);
-  });
+io.on("connection", (socket) => {
+    console.log("✅ Client Connected:", socket.id);
+
+    socket.on("disconnect", () => {
+        console.log("❌ Client Disconnected:", socket.id);
+    });
 });
 
-process.on("SIGINT", () => {
-  console.log("[Server] SIGINT received. Shutting down gracefully…");
-  stopGpsScheduler();
-  httpServer.close(() => {
-    console.log("[Server] HTTP server closed.");
-    process.exit(0);
-  });
+// Store latest GPS location (temporary)
+let currentLocation = {};
+
+// Store GPS history (temporary)
+let gpsHistory = [];
+
+// Home Route
+app.get("/", (req, res) => {
+    res.send("🚍 Bus Tracker Backend Running");
+});
+
+// ------------------------
+// Update GPS Location
+// ------------------------
+app.post("/api/gps/update", async (req, res) => {
+
+    try {
+
+        const { bus_id, latitude, longitude, speed, heading } = req.body;
+
+        // Validate required fields
+        if (
+            !bus_id ||
+            latitude === undefined ||
+            longitude === undefined
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "bus_id, latitude and longitude are required."
+            });
+        }
+
+        const gpsData = {
+            bus_id,
+            latitude,
+            longitude,
+            speed,
+            heading,
+            received_at: new Date().toISOString()
+        };
+
+        // Update latest location
+        currentLocation = gpsData;
+
+        // Save to history
+        gpsHistory.push(gpsData);
+
+        // Save to Supabase
+        const { data, error } = await supabase
+            .from("gps_logs")
+            .insert([gpsData])
+            .select();
+
+        console.log("Supabase data:", data);
+        console.log("Supabase error:", error);
+        // Broadcast the latest GPS data to all connected clients
+        io.emit("gpsUpdate", gpsData);
+
+        res.status(200).json({
+            success: true,
+            message: "GPS Location Saved Successfully",
+            data
+        });
+
+    } catch (err) {
+
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+});
+
+// ------------------------
+// Get Latest GPS Location
+// ------------------------
+app.get("/api/gps/live", (req, res) => {
+
+    if (Object.keys(currentLocation).length === 0) {
+        return res.status(404).json({
+            success: false,
+            message: "No GPS data available."
+        });
+    }
+
+    res.json({
+        success: true,
+        data: currentLocation
+    });
+
+});
+
+// ------------------------
+// Get GPS History (Memory)
+// ------------------------
+app.get("/api/gps/history", (req, res) => {
+
+    res.json({
+        success: true,
+        totalLocations: gpsHistory.length,
+        data: gpsHistory
+    });
+
+});
+
+// ------------------------
+// Get GPS History from Supabase
+// ------------------------
+app.get("/api/gps/history/db", async (req, res) => {
+
+    try {
+
+        const { data, error } = await supabase
+            .from("gps_logs")
+            .select("*")
+            .order("received_at", { ascending: false });
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            totalLocations: data.length,
+            data
+        });
+
+    } catch (err) {
+
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+});
+
+// ------------------------
+// Clear Local Memory
+// ------------------------
+app.delete("/api/gps/history", (req, res) => {
+
+    gpsHistory = [];
+    currentLocation = {};
+
+    res.json({
+        success: true,
+        message: "Local GPS History Cleared"
+    });
+
+});
+
+// Start Server
+const PORT = 5000;
+
+server.listen(PORT, () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    console.log("✅ Socket.IO Server Started");
+});
+
+//exp
+app.use(express.json());
+
+app.post("/traccar/webhook", async (req, res) => {
+
+    try {
+
+        console.log("🔥 TRACCAR WEBHOOK RECEIVED");
+
+        const { device, position } = req.body;
+
+        const gpsData = {
+            bus_id: device.uniqueId,
+            latitude: position.latitude,
+            longitude: position.longitude,
+            speed: position.speed,
+            heading: position.course,
+            received_at: position.fixTime
+        };
+
+        console.log(gpsData);
+
+        const { data, error } = await supabase
+            .from("gps_logs")
+            .insert([gpsData])
+            .select();
+
+        if (error) {
+            console.error("Supabase Error:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        // Update latest location
+        currentLocation = gpsData;
+
+        // Store in memory
+        gpsHistory.push(gpsData);
+
+        // Notify frontend
+        io.emit("gpsUpdate", gpsData);
+
+        console.log("✅ Saved to Supabase");
+
+        res.sendStatus(200);
+
+    } catch (err) {
+
+        console.error(err);
+
+        res.status(500).send(err.message);
+
+    }
+
 });
